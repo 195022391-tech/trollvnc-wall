@@ -86,7 +86,8 @@ func (s *Server) handleConn(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
 	remote := conn.RemoteAddr().String()
 	log.Printf("ctrl accept from %s", remote)
-	_ = conn.SetDeadline(time.Now().Add(time.Duration(s.cfg.Ctrl.ReadTimeoutMs) * time.Millisecond * 3))
+	// hello 首包：给手机写缓冲 / RunLoop 一点余量
+	_ = conn.SetDeadline(time.Now().Add(20 * time.Second))
 
 	raw, err := ReadFrame(conn, s.cfg.Ctrl.MaxFrameSize)
 	if err != nil {

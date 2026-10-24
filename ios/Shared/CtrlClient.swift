@@ -1,108 +1,101 @@
 import Foundation
+import Darwin
 
-/// 墙控制通道：[u32 BE len][json] — CFStream + 专用队列 RunLoop（与 RTSP 同 TCP 路径）
+/// 墙控制通道：[u32 BE len][json] — POSIX TCP（CFStream 能连上但不写出 hello）
 final class CtrlClient {
-    private var input: InputStream?
-    private var output: OutputStream?
+    private var fd: Int32 = -1
     private let queue = DispatchQueue(label: "cn.local.wallphone.ctrl")
     private var running = false
-    private var hbTimer: Timer?
+    private var recvBuf = Data()
     var onLog: ((String) -> Void)?
     var onSetQuality: ((_ mode: String, _ seq: UInt64, _ forceIdr: Bool, _ w: Int, _ h: Int, _ br: Int, _ fps: Int) -> Void)?
 
     func connect(host: String, port: Int, deviceId: String, token: String, name: String) {
         disconnect()
-        var readStream: Unmanaged<CFReadStream>?
-        var writeStream: Unmanaged<CFWriteStream>?
-        CFStreamCreatePairWithSocketToHost(nil, host as CFString, UInt32(port), &readStream, &writeStream)
-        guard let rs = readStream?.takeRetainedValue(), let ws = writeStream?.takeRetainedValue() else {
-            onLog?("ctrl: create stream failed")
-            return
-        }
-        let input = rs as InputStream
-        let output = ws as OutputStream
-        self.input = input
-        self.output = output
-
-        let boot = DispatchSemaphore(value: 0)
-        var bootErr: String?
         queue.async { [weak self] in
-            guard let self else { boot.signal(); return }
-            input.schedule(in: .current, forMode: .common)
-            output.schedule(in: .current, forMode: .common)
-            input.open()
-            output.open()
+            guard let self else { return }
             do {
-                try Self.waitOpen(input, output, timeoutMs: 8000)
-            } catch {
-                bootErr = error.localizedDescription
-                boot.signal()
-                return
-            }
-            self.running = true
-            boot.signal()
-            self.onLog?("ctrl: tcp ready")
+                let sock = try Self.tcpConnect(host: host, port: port, timeoutSec: 8)
+                self.fd = sock
+                self.running = true
+                self.onLog?("ctrl: tcp ready fd=\(sock)")
 
-            let hello: [String: Any] = [
-                "type": "hello",
-                "body": ["deviceId": deviceId, "token": token, "name": name],
-            ]
-            do {
+                let hello: [String: Any] = [
+                    "type": "hello",
+                    "body": ["deviceId": deviceId, "token": token, "name": name],
+                ]
                 try self.writeJSON(hello)
                 self.onLog?("ctrl: hello sent")
-            } catch {
-                self.onLog?("ctrl: hello failed \(error.localizedDescription)")
-                self.teardownStreams()
-                return
-            }
 
-            // RunLoop Timer（同队列），避免 GCD timer 被 readLoop 饿死
-            let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
-                guard let self, self.running else { return }
-                try? self.writeJSON(["type": "heartbeat"])
+                self.loop(deviceId: deviceId, token: token, name: name)
+            } catch {
+                self.onLog?("ctrl: \(error.localizedDescription)")
+                self.closeFD()
             }
-            RunLoop.current.add(timer, forMode: .common)
-            self.hbTimer = timer
-            self.readLoop()
-        }
-        _ = boot.wait(timeout: .now() + 10)
-        if let bootErr {
-            onLog?("ctrl: tcp \(bootErr)")
-            disconnect()
-        } else if !running {
-            onLog?("ctrl: tcp connect timeout/fail")
-            disconnect()
         }
     }
 
     func disconnect() {
         running = false
-        queue.async { [weak self] in
-            self?.hbTimer?.invalidate()
-            self?.hbTimer = nil
-            self?.teardownStreams()
-        }
+        queue.async { [weak self] in self?.closeFD() }
     }
 
-    private func teardownStreams() {
+    private func closeFD() {
         running = false
-        input?.close()
-        output?.close()
-        input = nil
-        output = nil
+        if fd >= 0 {
+            Darwin.close(fd)
+            fd = -1
+        }
+        recvBuf.removeAll()
     }
 
-    private func readLoop() {
-        guard let input else { return }
+    private func loop(deviceId: String, token: String, name: String) {
+        var lastHb = Date.distantPast
+        var buf = [UInt8](repeating: 0, count: 8192)
         while running {
-            do {
-                let frame = try readFrame(input)
-                handle(frame)
-            } catch {
-                if running { onLog?("ctrl: read end \(error.localizedDescription)") }
-                teardownStreams()
+            let now = Date()
+            if now.timeIntervalSince(lastHb) >= 0.5 {
+                try? writeJSON(["type": "heartbeat"])
+                lastHb = now
+            }
+            // 200ms poll
+            var pfd = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+            let pr = poll(&pfd, 1, 200)
+            if pr < 0 {
+                if errno == EINTR { continue }
+                onLog?("ctrl: poll err \(errno)")
+                break
+            }
+            if pr == 0 { continue }
+            if pfd.revents & Int16(POLLERR | POLLHUP | POLLNVAL) != 0 {
+                onLog?("ctrl: peer closed")
+                break
+            }
+            if pfd.revents & Int16(POLLIN) != 0 {
+                let n = Darwin.recv(fd, &buf, buf.count, 0)
+                if n <= 0 {
+                    onLog?("ctrl: recv end n=\(n)")
+                    break
+                }
+                recvBuf.append(contentsOf: buf[0 ..< n])
+                drainFrames()
+            }
+        }
+        closeFD()
+    }
+
+    private func drainFrames() {
+        while recvBuf.count >= 4 {
+            let n = Int(recvBuf[0]) << 24 | Int(recvBuf[1]) << 16 | Int(recvBuf[2]) << 8 | Int(recvBuf[3])
+            guard n > 0, n <= 65536 else {
+                onLog?("ctrl: bad len \(n)")
+                closeFD()
                 return
             }
+            guard recvBuf.count >= 4 + n else { return }
+            let payload = recvBuf.subdata(in: 4 ..< (4 + n))
+            recvBuf.removeSubrange(0 ..< (4 + n))
+            handle(payload)
         }
     }
 
@@ -137,74 +130,92 @@ final class CtrlClient {
     }
 
     private func writeJSON(_ obj: [String: Any]) throws {
-        guard let output, running else { throw NSError(domain: "ctrl", code: 1) }
+        guard fd >= 0, running else {
+            throw NSError(domain: "ctrl", code: 1, userInfo: [NSLocalizedDescriptionKey: "not connected"])
+        }
         let payload = try JSONSerialization.data(withJSONObject: obj)
         var len = UInt32(payload.count).bigEndian
-        var hdr = Data(bytes: &len, count: 4)
-        hdr.append(payload)
-        try writeAll(output, hdr)
-    }
-
-    private func readFrame(_ input: InputStream) throws -> Data {
-        var hdr = [UInt8](repeating: 0, count: 4)
-        try readExact(input, &hdr, 4)
-        let n = Int(hdr[0]) << 24 | Int(hdr[1]) << 16 | Int(hdr[2]) << 8 | Int(hdr[3])
-        if n <= 0 || n > 65536 { throw NSError(domain: "ctrl", code: 2) }
-        var buf = [UInt8](repeating: 0, count: n)
-        try readExact(input, &buf, n)
-        return Data(buf)
-    }
-
-    private func readExact(_ input: InputStream, _ buf: inout [UInt8], _ count: Int) throws {
-        var off = 0
-        let deadline = Date().addingTimeInterval(8)
-        while off < count {
-            if !running { throw NSError(domain: "ctrl", code: 6) }
-            if Date() > deadline {
-                throw NSError(domain: "ctrl", code: 5, userInfo: [NSLocalizedDescriptionKey: "read timeout"])
+        var frame = Data(bytes: &len, count: 4)
+        frame.append(payload)
+        try frame.withUnsafeBytes { raw in
+            var sent = 0
+            let total = raw.count
+            let base = raw.bindMemory(to: UInt8.self).baseAddress!
+            while sent < total {
+                let n = Darwin.send(fd, base.advanced(by: sent), total - sent, 0)
+                if n < 0 {
+                    if errno == EINTR { continue }
+                    throw NSError(domain: "ctrl", code: 4, userInfo: [NSLocalizedDescriptionKey: "send errno=\(errno)"])
+                }
+                if n == 0 { throw NSError(domain: "ctrl", code: 4, userInfo: [NSLocalizedDescriptionKey: "send 0"]) }
+                sent += n
             }
-            // 泵 RunLoop：心跳 Timer + CFStream 回调
-            RunLoop.current.run(mode: .common, before: Date().addingTimeInterval(0.05))
-            guard input.hasBytesAvailable || input.streamStatus == .atEnd || input.streamStatus == .error else {
+        }
+    }
+
+    private static func tcpConnect(host: String, port: Int, timeoutSec: Int) throws -> Int32 {
+        var hints = addrinfo(
+            ai_flags: 0,
+            ai_family: AF_INET,
+            ai_socktype: SOCK_STREAM,
+            ai_protocol: IPPROTO_TCP,
+            ai_addrlen: 0,
+            ai_canonname: nil,
+            ai_addr: nil,
+            ai_next: nil
+        )
+        var info: UnsafeMutablePointer<addrinfo>?
+        let portStr = String(port)
+        let err = host.withCString { h in
+            portStr.withCString { p in
+                getaddrinfo(h, p, &hints, &info)
+            }
+        }
+        guard err == 0, let info else {
+            throw NSError(domain: "ctrl", code: 7, userInfo: [NSLocalizedDescriptionKey: "getaddrinfo \(err)"])
+        }
+        defer { freeaddrinfo(info) }
+
+        var lastErr = 0
+        var ptr: UnsafeMutablePointer<addrinfo>? = info
+        while let ai = ptr {
+            let sock = socket(ai.pointee.ai_family, ai.pointee.ai_socktype, ai.pointee.ai_protocol)
+            if sock < 0 {
+                lastErr = errno
+                ptr = ai.pointee.ai_next
                 continue
             }
-            if input.streamStatus == .error || input.streamStatus == .atEnd {
-                throw NSError(domain: "ctrl", code: 3)
+            // nonblock connect + poll
+            let flags = fcntl(sock, F_GETFL, 0)
+            _ = fcntl(sock, F_SETFL, flags | O_NONBLOCK)
+            let cr = Darwin.connect(sock, ai.pointee.ai_addr, ai.pointee.ai_addrlen)
+            if cr == 0 {
+                _ = fcntl(sock, F_SETFL, flags)
+                return sock
             }
-            let n = buf.withUnsafeMutableBytes { raw in
-                input.read(raw.bindMemory(to: UInt8.self).baseAddress!.advanced(by: off), maxLength: count - off)
+            if errno != EINPROGRESS {
+                lastErr = errno
+                Darwin.close(sock)
+                ptr = ai.pointee.ai_next
+                continue
             }
-            if n < 0 { throw NSError(domain: "ctrl", code: 3) }
-            if n == 0 { continue }
-            off += n
+            var pfd = pollfd(fd: sock, events: Int16(POLLOUT), revents: 0)
+            let pr = poll(&pfd, 1, Int32(timeoutSec * 1000))
+            if pr > 0, pfd.revents & Int16(POLLOUT) != 0 {
+                var soErr: Int32 = 0
+                var len = socklen_t(MemoryLayout<Int32>.size)
+                getsockopt(sock, SOL_SOCKET, SO_ERROR, &soErr, &len)
+                if soErr == 0 {
+                    _ = fcntl(sock, F_SETFL, flags) // back to blocking
+                    return sock
+                }
+                lastErr = soErr
+            } else {
+                lastErr = errno == 0 ? ETIMEDOUT : errno
+            }
+            Darwin.close(sock)
+            ptr = ai.pointee.ai_next
         }
-    }
-
-    private func writeAll(_ stream: OutputStream, _ data: Data) throws {
-        var offset = 0
-        while offset < data.count {
-            if !stream.hasSpaceAvailable {
-                RunLoop.current.run(mode: .common, before: Date().addingTimeInterval(0.02))
-            }
-            let wrote = data.withUnsafeBytes { raw -> Int in
-                stream.write(raw.bindMemory(to: UInt8.self).baseAddress!.advanced(by: offset), maxLength: data.count - offset)
-            }
-            if wrote <= 0 { throw NSError(domain: "ctrl", code: 4) }
-            offset += wrote
-        }
-    }
-
-    private static func waitOpen(_ input: InputStream, _ output: OutputStream, timeoutMs: Int) throws {
-        let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000)
-        while Date() < deadline {
-            let inSt = input.streamStatus
-            let outSt = output.streamStatus
-            if inSt == .error || outSt == .error {
-                throw NSError(domain: "ctrl", code: 7, userInfo: [NSLocalizedDescriptionKey: "connect failed"])
-            }
-            if (inSt == .open || inSt == .reading) && (outSt == .open || outSt == .writing) { return }
-            RunLoop.current.run(mode: .common, before: Date().addingTimeInterval(0.05))
-        }
-        throw NSError(domain: "ctrl", code: 8, userInfo: [NSLocalizedDescriptionKey: "connect timeout"])
+        throw NSError(domain: "ctrl", code: 8, userInfo: [NSLocalizedDescriptionKey: "connect errno=\(lastErr)"])
     }
 }
