@@ -234,12 +234,12 @@ final class RTSPPublisher {
     private static func waitOpen(_ input: InputStream, _ output: OutputStream, timeoutMs: Int) throws {
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000)
         while Date() < deadline {
-            let is = input.streamStatus
-            let os = output.streamStatus
-            if is == .error || os == .error {
+            let inSt = input.streamStatus
+            let outSt = output.streamStatus
+            if inSt == .error || outSt == .error {
                 throw NSError(domain: "rtsp", code: 7, userInfo: [NSLocalizedDescriptionKey: "tcp connect failed"])
             }
-            if (is == .open || is == .reading) && (os == .open || os == .writing) { return }
+            if (inSt == .open || inSt == .reading) && (outSt == .open || outSt == .writing) { return }
             RunLoop.current.run(until: Date().addingTimeInterval(0.05))
         }
         throw NSError(domain: "rtsp", code: 8, userInfo: [NSLocalizedDescriptionKey: "tcp connect timeout"])

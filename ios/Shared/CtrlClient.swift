@@ -29,14 +29,14 @@ final class CtrlClient {
         output.open()
         let deadline = Date().addingTimeInterval(5)
         while Date() < deadline {
-            let is = input.streamStatus
-            let os = output.streamStatus
-            if is == .error || os == .error {
+            let inSt = input.streamStatus
+            let outSt = output.streamStatus
+            if inSt == .error || outSt == .error {
                 onLog?("ctrl: tcp connect failed")
                 disconnect()
                 return
             }
-            if (is == .open || is == .reading) && (os == .open || os == .writing) { break }
+            if (inSt == .open || inSt == .reading) && (outSt == .open || outSt == .writing) { break }
             RunLoop.current.run(until: Date().addingTimeInterval(0.05))
         }
         guard input.streamStatus != .notOpen, output.streamStatus != .notOpen else {
