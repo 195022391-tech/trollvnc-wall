@@ -1,0 +1,61 @@
+############################################
+# TrollVNC 屏幕墙 — MediaMTX 透传配置
+# 仅透传，关闭转码；开启 TCP RTSP + HTTP-FLV
+# webhook 推流上下线 → Go 后端同步设备流状态
+############################################
+
+logLevel: info
+logDestinations: [stdout]
+
+# ---- API（可选调试）----
+api: yes
+apiAddress: :9997
+
+# ---- RTSP：仅 TCP interleaved ----
+rtsp: yes
+rtspAddress: :8554
+protocols: [tcp]
+# 禁止 UDP，强制 interleaved
+rtspTransports: [tcp]
+
+# ---- HTTP：提供 HTTP-FLV / HLS 等 ----
+# MediaMTX 默认 path 发布后可通过：
+#   http://host:8889/<path>/  (WebRTC 可选关)
+#   http://host:8888/<path>/index.m3u8 (HLS)
+# HTTP-FLV 走 8888 的 /<path>/stream.flv（v1.9+）
+# 若版本较旧，用 mpegts: http://host:8888/<path>/stream.m3u8 或
+# 前端直接拉 http-flv：http://host:8888/<path>
+http: yes
+httpAddress: :8888
+hls: no
+
+# WebRTC 关闭（不需要）
+webrtc: no
+# RTMP 关闭（禁止双路/多余入口）
+rtmp: no
+# SRT 关闭
+srt: no
+
+# ---- 全局 path 默认：纯透传，零转码 ----
+pathDefaults:
+  # 来源：设备主动 publish
+  source: publisher
+  # 录制关
+  record: no
+  # 不覆盖编码参数（透传）
+  # MediaMTX 无转码时不会改 H.264 SPS/PPS
+  overridePublisher: yes
+  # 无发布者时立即不可读
+  sourceOnDemand: no
+
+  # ---- webhook：推流上下线回调 Go 后端 ----
+  # runOnReady / runOnNotReady 在 path 有/无 publisher 时触发
+  runOnReady: curl -sS -X POST "http://127.0.0.1:18080/webhook/stream" -H "Content-Type: application/json" -d "{\"event\":\"ready\",\"path\":\"$MTX_PATH\",\"query\":\"$MTX_QUERY\",\"sourceType\":\"$MTX_SOURCE_TYPE\",\"sourceID\":\"$MTX_SOURCE_ID\"}"
+  runOnReadyRestart: no
+  runOnNotReady: curl -sS -X POST "http://127.0.0.1:18080/webhook/stream" -H "Content-Type: application/json" -d "{\"event\":\"notready\",\"path\":\"$MTX_PATH\",\"query\":\"$MTX_QUERY\",\"sourceType\":\"$MTX_SOURCE_TYPE\",\"sourceID\":\"$MTX_SOURCE_ID\"}"
+
+# ---- 动态 path：设备以 deviceId 为 path 名推流 ----
+# 例：rtsp://server:8554/iphone-abc123
+# 播放 HTTP-FLV：http://server:8888/iphone-abc123
+paths:
+  all_others:

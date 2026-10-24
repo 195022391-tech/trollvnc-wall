@@ -1,0 +1,36 @@
+2026/10/24 12:52:15 INF MediaMTX v1.11.3
+2026/10/24 12:52:15 INF configuration loaded from E:\H264\trollvnc-wall\tools\mediamtx\mediamtx.wall.yml
+2026/10/24 12:52:15 INF [RTSP] listener opened on :8554 (TCP)
+2026/10/24 12:52:15 INF [API] listener opened on :9997
+2026/10/24 12:52:39 INF [RTSP] [conn 127.0.0.1:54785] opened
+2026/10/24 12:52:39 INF [RTSP] [session 0270cca9] created by 127.0.0.1:54785
+2026/10/24 12:52:39 INF [RTSP] [session 0270cca9] is publishing to path 'phone-demo', 1 track (H264)
+2026/10/24 12:52:43 INF [RTSP] [conn 127.0.0.1:55526] opened
+2026/10/24 12:52:43 INF [RTSP] [session 103d98de] created by 127.0.0.1:55526
+2026/10/24 12:52:43 INF [RTSP] [session 103d98de] is reading from path 'phone-demo', with TCP, 1 track (H264)
+2026/10/24 12:52:51 INF [RTSP] [session 103d98de] destroyed: torn down by 127.0.0.1:55526
+2026/10/24 12:52:51 INF [RTSP] [conn 127.0.0.1:55526] closed: read tcp 127.0.0.1:8554->127.0.0.1:55526: wsarecv: An existing connection was forcibly closed by the remote host.
+2026/10/24 12:53:24 INF [RTSP] [conn 127.0.0.1:61222] opened
+2026/10/24 12:53:24 INF [RTSP] [session a99545d4] created by 127.0.0.1:61222
+2026/10/24 12:53:24 INF [RTSP] [session a99545d4] is reading from path 'phone-demo', with TCP, 1 track (H264)
+2026/10/24 12:53:29 INF [RTSP] [session a99545d4] destroyed: torn down by 127.0.0.1:61222
+2026/10/24 12:53:29 INF [RTSP] [conn 127.0.0.1:61222] closed: read tcp 127.0.0.1:8554->127.0.0.1:61222: wsarecv: An existing connection was forcibly closed by the remote host.
+2026/10/24 12:54:25 INF [RTSP] [conn 127.0.0.1:53353] opened
+2026/10/24 12:54:25 INF [RTSP] [session 09922b67] created by 127.0.0.1:53353
+2026/10/24 12:54:25 INF [RTSP] [session 09922b67] is reading from path 'phone-demo', with TCP, 1 track (H264)
+2026/10/24 12:54:33 INF [RTSP] [session 09922b67] destroyed: torn down by 127.0.0.1:53353
+2026/10/24 12:54:33 INF [RTSP] [conn 127.0.0.1:53353] closed: read tcp 127.0.0.1:8554->127.0.0.1:53353: wsarecv: An existing connection was forcibly closed by the remote host.
+2026/10/24 12:54:34 INF [RTSP] [conn 127.0.0.1:54651] opened
+2026/10/24 12:54:34 INF [RTSP] [session d2da101b] created by 127.0.0.1:54651
+2026/10/24 12:54:34 INF [RTSP] [session d2da101b] is publishing to path 'phone-test', 1 track (H264)
+2026/10/24 12:54:51 INF [RTSP] [conn 127.0.0.1:56845] opened
+2026/10/24 12:54:51 INF [RTSP] [session 82fa7c70] created by 127.0.0.1:56845
+2026/10/24 12:54:51 INF [RTSP] [session 82fa7c70] is reading from path 'phone-test', with TCP, 1 track (H264)
+2026/10/24 12:54:57 INF [RTSP] [session 82fa7c70] destroyed: torn down by 127.0.0.1:56845
+2026/10/24 12:54:57 INF [RTSP] [conn 127.0.0.1:56845] closed: read tcp 127.0.0.1:8554->127.0.0.1:56845: wsarecv: An existing connection was forcibly closed by the remote host.
+2026/10/24 12:56:12 INF [RTSP] [conn 127.0.0.1:53910] opened
+2026/10/24 12:56:12 INF [RTSP] [conn 127.0.0.1:53911] opened
+2026/10/24 12:56:12 INF [RTSP] [session 36180daa] created by 127.0.0.1:53910
+2026/10/24 12:56:12 INF [RTSP] [session 001a1d13] created by 127.0.0.1:53911
+2026/10/24 12:56:12 INF [RTSP] [session 36180daa] is reading from path 'phone-demo', with TCP, 1 track (H264)
+2026/10/24 12:56:12 INF [RTSP] [session 001a1d13] is reading from path 'phone-test', with TCP, 1 track (H264)

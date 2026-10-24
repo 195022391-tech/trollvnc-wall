@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TrollVNC 屏幕墙</title>
+  <link rel="stylesheet" href="/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"></script>
+</head>
+<body>
+  <header class="bar">
+    <h1>TrollVNC 屏幕墙</h1>
+    <div class="actions">
+      <button type="button" id="btn-reg">登记设备</button>
+      <span id="metrics" class="meta"></span>
+    </div>
+  </header>
+  <main id="grid" class="grid"></main>
+  <dialog id="dlg">
+    <form method="dialog" id="reg-form">
+      <h3>登记设备 token</h3>
+      <label>deviceId <input name="deviceId" required /></label>
+      <label>token <input name="token" required /></label>
+      <label>name <input name="name" /></label>
+      <menu>
+        <button value="cancel">取消</button>
+        <button id="reg-ok" value="default">确定</button>
+      </menu>
+    </form>
+  </dialog>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

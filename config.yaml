@@ -1,0 +1,77 @@
+# TrollVNC 屏幕墙 — 运行配置（禁止硬编码本机 IP 到源码）
+# 超时与 mediamtx.yml 必须用同一 GOP 公式生成，禁止手填两套不一致值
+
+server:
+  ctrl_listen: "0.0.0.0:19000"      # 设备 TCP 控制
+  auth_listen: "127.0.0.1:18080"    # MTX authHTTP + 内部 HTTP
+  ts_listen: "0.0.0.0:18081"        # HTTP-TS 唯一读出口
+  api_listen: "127.0.0.1:18082"     # 前端/Wails HTTP API
+  public_host: "127.0.0.1"          # 前端拼 TS URL 用，可改成局域网 IP
+
+mediamtx:
+  api_addr: "http://127.0.0.1:9997"
+  rtsp_addr: "127.0.0.1:8554"
+  # 内部 read：仅 Go 使用，不下发前端
+  internal_user: "wall_internal"
+  internal_pass: "change-me-internal"
+  # 启动探测：Exclude 仅能力验证通过才用；默认优先 InternalUsers
+  prefer_internal_users: true
+
+encode:
+  gop_seconds: 2.0
+  min_gop: 1.0
+  # effectiveGop = clamp(EWMA, min_gop, gop_seconds)；超时封顶 8s
+  timeout_cap_seconds: 8.0
+
+quality:
+  preview_width: 1280
+  preview_height: 720
+  preview_bitrate_kbps: 600
+  preview_fps: 15
+  hd_bitrate_kbps: 3000
+  hd_fps: 25
+  # 高级：允许 720↔1080（体验代价大）
+  allow_resolution_switch: false
+  hd_width: 1920
+  hd_height: 1080
+
+hd:
+  max_hd: 4
+  queue_timeout_ms: 3000
+  idle_downgrade_seconds: 0   # 0=关；非焦点 HD idle 降级
+  no_frame_release_seconds: 10
+
+ctrl:
+  max_frame_size: 65536
+  heartbeat_interval_ms: 500
+  heartbeat_miss_limit: 5     # 连续失败才离线；成功清零
+  read_timeout_ms: 3000
+  write_timeout_ms: 3000
+  reliable_retries: 2
+  switch_timeout_ms: 3000
+
+stream_sync:
+  poll_jitter_min_ms: 400
+  poll_jitter_max_ms: 700
+  slow_threshold_devices: 32
+  slow_poll_ms: 2000
+  api_backoff_max_ms: 8000
+
+ts:
+  first_idr_wait_cap_ms: 8000
+  writer_handoff_timeout_ms: 1500
+  write_timeout_ms: 3000
+  max_redirects: 2
+  pcr_interval_ms: 100
+  pat_interval_ms: 500
+
+auth:
+  rate_limit_fail_per_sec: 5
+  rate_limit_ok_per_sec: 30
+
+ui:
+  page_size: 32              # 前端分页上限；后端不限 32
+  max_device: 0              # 0=不限
+
+logging:
+  heartbeat_debug: false

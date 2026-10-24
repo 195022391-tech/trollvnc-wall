@@ -1,0 +1,48 @@
+############################################
+# TrollVNC — MediaMTX v1.11+（仅 publish 收纳）
+# 读出口在 Go HTTP-TS；超时与 config.yaml GOP 公式对齐（gop=2 → 5s）
+############################################
+
+logLevel: info
+logDestinations: [stdout]
+
+readTimeout: 5s
+writeTimeout: 5s
+
+api: yes
+apiAddress: :9997
+
+# 鉴权：设备 publish 走 HTTP；Go 内部 read 走 InternalUsers
+authMethod: http
+authHTTPAddress: http://127.0.0.1:18080/api/auth/rtsp
+authHTTPExclude:
+  - action: api
+  - action: metrics
+  - action: pprof
+
+authInternalUsers:
+  - user: wall_internal
+    pass: change-me-internal
+    permissions:
+      - action: read
+  - user: any
+    pass:
+    permissions: []
+
+rtsp: yes
+rtspAddress: :8554
+rtspTransports: [tcp]
+
+rtmp: no
+hls: no
+webrtc: no
+srt: no
+
+pathDefaults:
+  source: publisher
+  record: no
+  overridePublisher: yes
+  sourceOnDemand: no
+
+paths:
+  all_others:

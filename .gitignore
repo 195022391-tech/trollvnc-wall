@@ -1,0 +1,10 @@
+backend/trollvnc-wall.exe
+backend/*.log
+**/node_modules/
+scripts/node_modules/
+test-artifacts/
+dist/
+ios/build/
+ios/*.xcodeproj/
+*.tipa
+.DS_Store

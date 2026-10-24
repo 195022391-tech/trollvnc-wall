@@ -1,0 +1,105 @@
+:root {
+  --bg: #12141a;
+  --panel: #1c1f28;
+  --text: #e8eaef;
+  --muted: #8b93a7;
+  --accent: #3d8bfd;
+  --offline: #3a3f4b;
+  --hd: #2a6f4e;
+  --switching: #8a6d1d;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Segoe UI", "PingFang SC", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: var(--panel);
+  border-bottom: 1px solid #2a2f3a;
+}
+.bar h1 { margin: 0; font-size: 1.1rem; font-weight: 600; }
+.actions { display: flex; gap: 0.75rem; align-items: center; }
+button {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 6px;
+  padding: 0.4rem 0.75rem;
+  cursor: pointer;
+}
+button.ghost { background: transparent; border: 1px solid #3a4150; color: var(--text); }
+.meta { color: var(--muted); font-size: 0.85rem; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+.cell {
+  position: relative;
+  background: #0b0d12;
+  border-radius: 8px;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border: 1px solid #2a2f3a;
+}
+.cell video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+.cell .mask {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(18, 20, 26, 0.72);
+  color: var(--muted);
+  font-size: 0.9rem;
+  pointer-events: none;
+}
+.cell.offline .mask { background: rgba(30, 32, 40, 0.85); }
+.cell.switching { outline: 2px solid var(--switching); }
+.cell.hd { outline: 2px solid var(--hd); }
+.cell.focused { outline: 2px solid var(--accent); }
+.cell .hud {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  background: linear-gradient(transparent, rgba(0,0,0,.75));
+}
+.cell .hud button { font-size: 0.75rem; padding: 0.25rem 0.45rem; }
+.cell .tag {
+  position: absolute;
+  top: 0.35rem; left: 0.35rem;
+  font-size: 0.7rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  background: #000a;
+}
+dialog {
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 1rem;
+}
+dialog label { display: block; margin: 0.5rem 0; }
+dialog input {
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.35rem;
+  background: #0b0d12;
+  border: 1px solid #333;
+  color: var(--text);
+}
