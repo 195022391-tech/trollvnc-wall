@@ -22,7 +22,7 @@ permissions:
 jobs:
   tipa:
     name: macOS build WallPhone tipa
-    runs-on: macos-15
+    runs-on: macos-14
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,15 +48,14 @@ jobs:
       - name: Select Xcode
         run: |
           set -euo pipefail
-          for p in /Applications/Xcode_16.2.app /Applications/Xcode_16.1.app /Applications/Xcode_16.0.app /Applications/Xcode.app; do
-            if [[ -d "$p" ]]; then
+          for p in /Applications/Xcode_16.2.app /Applications/Xcode_16.1.app /Applications/Xcode_15.4.app /Applications/Xcode.app; do
+            if [[ -d "$p/Contents/Developer/Platforms/iPhoneOS.platform" ]]; then
               sudo xcode-select -s "$p/Contents/Developer"
               break
             fi
           done
           xcodebuild -version
-          # macos-15 runners sometimes ship Xcode without the iOS platform
-          xcodebuild -downloadPlatform iOS
+          xcodebuild -showsdks | grep -i iphoneos
 
       - name: Generate + Build
         working-directory: ios
