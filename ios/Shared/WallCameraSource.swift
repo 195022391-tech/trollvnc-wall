@@ -2,7 +2,7 @@ import AVFoundation
 import RootEncoder
 
 /// 绕过 RootEncoder CameraManager 错误的分辨率上下界检查（按 height 排序后用 first/last 的 width 比较会误杀 640x480）。
-final class WallCameraSource: NSObject, VideoSource, AVCaptureVideoDataOutputSampleBufferDelegate {
+final class WallCameraSource: VideoSource {
     private let queue = DispatchQueue(label: "wall.cam")
     private var session: AVCaptureSession?
     private var metal: MetalInterface?
@@ -10,6 +10,7 @@ final class WallCameraSource: NSObject, VideoSource, AVCaptureVideoDataOutputSam
     private var running = false
     private var preset: AVCaptureSession.Preset = .vga640x480
     private var rotation = 90
+    private lazy var sink = Sink(owner: self)
 
     func created() -> Bool { ready }
 
@@ -44,7 +45,7 @@ final class WallCameraSource: NSObject, VideoSource, AVCaptureVideoDataOutputSam
         let output = AVCaptureVideoDataOutput()
         output.alwaysDiscardsLateVideoFrames = true
         output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
-        output.setSampleBufferDelegate(self, queue: queue)
+        output.setSampleBufferDelegate(sink, queue: queue)
         guard session.canAddOutput(output) else { return }
         session.addOutput(output)
         output.connections.filter(\.isVideoOrientationSupported).forEach {
@@ -70,7 +71,7 @@ final class WallCameraSource: NSObject, VideoSource, AVCaptureVideoDataOutputSam
         ready = false
     }
 
-    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+    fileprivate func send(_ sampleBuffer: CMSampleBuffer) {
         metal?.sendBuffer(buffer: sampleBuffer)
     }
 
@@ -89,6 +90,15 @@ final class WallCameraSource: NSObject, VideoSource, AVCaptureVideoDataOutputSam
         case 270: return .portraitUpsideDown
         case 180: return .landscapeRight
         default: return .landscapeLeft
+        }
+    }
+
+    /// NSObject 子类单独做 delegate，避免 `isRunning()` 与 ObjC 布尔命名冲突导致 VideoSource 不满足。
+    private final class Sink: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
+        weak var owner: WallCameraSource?
+        init(owner: WallCameraSource) { self.owner = owner }
+        func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+            owner?.send(sampleBuffer)
         }
     }
 }
