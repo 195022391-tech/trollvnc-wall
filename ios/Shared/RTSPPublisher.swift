@@ -29,6 +29,7 @@ final class RTSPPublisher {
         output.schedule(in: .current, forMode: .common)
         input.open()
         output.open()
+        try Self.waitOpen(input, output, timeoutMs: 5000)
 
         let base = "rtsp://\(host):\(port)/\(path)?token=\(token)"
         lastBase = base
@@ -228,5 +229,19 @@ final class RTSPPublisher {
             if wrote <= 0 { throw NSError(domain: "rtsp", code: 6) }
             offset += wrote
         }
+    }
+
+    private static func waitOpen(_ input: InputStream, _ output: OutputStream, timeoutMs: Int) throws {
+        let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000)
+        while Date() < deadline {
+            let is = input.streamStatus
+            let os = output.streamStatus
+            if is == .error || os == .error {
+                throw NSError(domain: "rtsp", code: 7, userInfo: [NSLocalizedDescriptionKey: "tcp connect failed"])
+            }
+            if (is == .open || is == .reading) && (os == .open || os == .writing) { return }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        throw NSError(domain: "rtsp", code: 8, userInfo: [NSLocalizedDescriptionKey: "tcp connect timeout"])
     }
 }
