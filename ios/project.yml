@@ -34,7 +34,7 @@ targets:
         CODE_SIGN_IDENTITY: ""
         DEVELOPMENT_TEAM: ""
         CURRENT_PROJECT_VERSION: 1
-        MARKETING_VERSION: "0.2.5"
+        MARKETING_VERSION: "0.2.6"
         GENERATE_INFOPLIST_FILE: NO
         LD_RUNPATH_SEARCH_PATHS:
           - "$(inherited)"

@@ -22,7 +22,7 @@ struct ContentView: View {
                     TextField("显示名", text: $name)
                 }
                 Section {
-                    Button(streaming ? "停止推流" : "开始推流（屏幕 H.265）") {
+                    Button(streaming ? "停止推流" : "开始推流（屏幕）") {
                         toggle()
                     }
                     .foregroundColor(streaming ? .red : .accentColor)

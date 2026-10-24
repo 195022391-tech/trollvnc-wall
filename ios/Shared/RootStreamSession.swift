@@ -3,10 +3,9 @@ import RootEncoder
 import ReplayKit
 import UIKit
 
-/// RootEncoder 屏幕（ReplayKit）→ RTSP TCP（优先 H.265）→ MediaMTX
-/// 不依赖相机硬件。
+/// 屏幕（ReplayKit / 窗口快照）→ RTSP TCP → MediaMTX。不依赖相机。
 final class RootStreamSession: NSObject, ConnectChecker {
-    private var stream: RtspDisplay?
+    private var stream: RtspStream?
     private var running = false
     var onLog: ((String) -> Void)?
 
@@ -20,63 +19,41 @@ final class RootStreamSession: NSObject, ConnectChecker {
     func start(host: String, deviceId: String, token: String, name: String) {
         stop()
         _ = name
-        guard RPScreenRecorder.shared().isAvailable else {
-            onLog?("ReplayKit 不可用，无法采屏")
-            return
-        }
-        onLog?("采屏模式（无相机）先要录屏权限")
-        preflightScreen { [weak self] ok in
-            guard let self else { return }
-            guard ok else {
-                self.onLog?("录屏未授权：控制中心/弹窗里允许「屏幕录制」")
-                return
-            }
-            self.onLog?("录屏已就绪，开始推 RTSP")
+        onLog?("采屏推流（无相机）")
+        DispatchQueue.main.async {
             self.begin(host: host, deviceId: deviceId, token: token)
         }
     }
 
-    /// 先起再停一次，把系统录屏授权拿下来，避免连上 MTX 后 5s 内无帧被踢。
-    private func preflightScreen(_ done: @escaping (Bool) -> Void) {
-        let rec = RPScreenRecorder.shared()
-        rec.isMicrophoneEnabled = false
-        rec.startCapture(handler: { _, _, _ in }, completionHandler: { [weak self] err in
-            if let err {
-                self?.onLog?("录屏启动失败：\(err.localizedDescription)")
-                DispatchQueue.main.async { done(false) }
-                return
-            }
-            rec.stopCapture { stopErr in
-                if let stopErr {
-                    self?.onLog?("录屏预检 stop：\(stopErr.localizedDescription)")
-                }
-                DispatchQueue.main.async { done(true) }
-            }
-        })
-    }
-
     private func begin(host: String, deviceId: String, token: String) {
+        // 墙侧 mpegts.js 对 H.265 不友好，优先 H.264；竖屏尺寸
         let trials: [(Int, Int, Int)] = [
             (720, 1280, 1_200_000),
             (540, 960, 800_000),
             (480, 640, 500_000),
         ]
-        let codecs: [VideoCodec] = [.H265, .H264]
+        let codecs: [VideoCodec] = [.H264, .H265]
 
         for codec in codecs {
-            let s = RtspDisplay(connectChecker: self)
+            let s = RtspStream(connectChecker: self)
+            let src = WallScreenSource()
+            src.onInfo = { [weak self] line in self?.onLog?(line) }
+            s.changeVideoSource(source: src)
             s.setVideoCodec(codec: codec)
             var vOK = false
             var used = (0, 0, 0)
             for t in trials {
-                if s.prepareVideo(width: t.0, height: t.1, fps: 30, bitrate: t.2, iFrameInterval: 2, rotation: 0) {
+                if s.prepareVideo(width: t.0, height: t.1, bitrate: t.2, fps: 30, iFrameInterval: 2, rotation: 0) {
                     vOK = true
                     used = t
                     break
                 }
                 onLog?("prepareVideo fail \(t.0)x\(t.1) \(codec)")
             }
-            guard vOK else { continue }
+            guard vOK else {
+                s.release()
+                continue
+            }
 
             let client = s.getStreamClient()
             client.setOnlyVideo(onlyVideo: true)
@@ -97,6 +74,7 @@ final class RootStreamSession: NSObject, ConnectChecker {
         running = false
         if let s = stream {
             if s.isStreaming() { s.stopStream() }
+            s.release()
         }
         stream = nil
     }
