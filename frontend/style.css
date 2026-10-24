@@ -66,6 +66,9 @@ button.ghost { background: transparent; border: 1px solid #3a4150; color: var(--
   font-size: 0.9rem;
   pointer-events: none;
 }
+.cell .mask[hidden] {
+  display: none !important;
+}
 .cell.offline .mask { background: rgba(30, 32, 40, 0.85); }
 .cell.switching { outline: 2px solid var(--switching); }
 .cell.hd { outline: 2px solid var(--hd); }

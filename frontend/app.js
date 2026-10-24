@@ -202,8 +202,10 @@ function renderSnap(snap) {
   } else if (snap.uiState === "switching") {
     mask.hidden = false;
     mask.textContent = "切换中…";
+    startPlay(st);
   } else {
     mask.hidden = true;
+    startPlay(st);
   }
 }
 
