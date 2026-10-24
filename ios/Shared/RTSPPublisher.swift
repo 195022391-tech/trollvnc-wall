@@ -49,10 +49,15 @@ final class RTSPPublisher {
             "Content-Type": "application/sdp",
             "Content-Length": "\(sdp.utf8.count)",
         ], body: sdp)
-        let setupURL = base.hasSuffix("/") ? base + "trackID=0" : base + "/trackID=0"
-        // Some servers want path without query on SETUP — try with query first
-        let setupResp = try request("SETUP", url: "\(base)/trackID=0", headers: [
-            "Transport": "RTP/AVP/TCP;unicast;interleaved=0-1",
+        // track URL: path before ?query
+        let setupURL: String = {
+            if let q = base.firstIndex(of: "?") {
+                return String(base[..<q]) + "/trackID=0" + String(base[q...])
+            }
+            return base + "/trackID=0"
+        }()
+        let setupResp = try request("SETUP", url: setupURL, headers: [
+            "Transport": "RTP/AVP/TCP;unicast;interleaved=0-1;mode=record",
         ])
         if let sess = setupResp["Session"] {
             session = sess.split(separator: ";").first.map(String.init) ?? sess
@@ -63,7 +68,6 @@ final class RTSPPublisher {
         ])
         started = true
         onLog?("rtsp: RECORD ok session=\(session)")
-        _ = setupURL
     }
 
     func disconnect() {
