@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @AppStorage("wall.host") private var host = "192.168.1.1"
+    @AppStorage("wall.host.v2") private var host = "192.168.9.103"
     @AppStorage("wall.deviceId") private var deviceId = "iphone-1"
     @AppStorage("wall.token") private var token = "changeme"
     @AppStorage("wall.name") private var name = "WallPhone"
