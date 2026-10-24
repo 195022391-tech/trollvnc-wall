@@ -2,7 +2,6 @@ import Foundation
 import VideoToolbox
 import CoreMedia
 
-/// VideoToolbox → AVCC length-prefixed NALs (+ SPS/PPS).
 final class H264Encoder {
     private var session: VTCompressionSession?
     private let queue = DispatchQueue(label: "cn.local.wallphone.encoder")
@@ -15,16 +14,13 @@ final class H264Encoder {
         var sess: VTCompressionSession?
         let status = VTCompressionSessionCreate(
             allocator: kCFAllocatorDefault,
-            width: width,
-            height: height,
+            width: width, height: height,
             codecType: kCMVideoCodecType_H264,
-            encoderSpecification: nil,
-            imageBufferAttributes: nil,
+            encoderSpecification: nil, imageBufferAttributes: nil,
             compressedDataAllocator: nil,
             outputCallback: { refcon, _, status, _, sampleBuffer in
                 guard status == noErr, let sampleBuffer, let refcon else { return }
-                let encoder = Unmanaged<H264Encoder>.fromOpaque(refcon).takeUnretainedValue()
-                encoder.handle(sampleBuffer)
+                Unmanaged<H264Encoder>.fromOpaque(refcon).takeUnretainedValue().handle(sampleBuffer)
             },
             refcon: Unmanaged.passUnretained(self).toOpaque(),
             compressionSessionOut: &sess
@@ -38,8 +34,7 @@ final class H264Encoder {
         VTSessionSetProperty(sess, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
         VTSessionSetProperty(sess, key: kVTCompressionPropertyKey_AverageBitRate, value: bitrateBps as CFNumber)
         VTSessionSetProperty(sess, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: fps as CFNumber)
-        let gop = max(1, fps * 2) as CFNumber
-        VTSessionSetProperty(sess, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: gop)
+        VTSessionSetProperty(sess, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: max(1, fps * 2) as CFNumber)
         VTCompressionSessionPrepareToEncodeFrames(sess)
     }
 
@@ -52,13 +47,8 @@ final class H264Encoder {
             }
             let pts = CMTime(value: CMTimeValue(ptsUs), timescale: 1_000_000)
             VTCompressionSessionEncodeFrame(
-                session,
-                imageBuffer: pixelBuffer,
-                presentationTimeStamp: pts,
-                duration: .invalid,
-                frameProperties: props,
-                sourceFrameRefcon: nil,
-                infoFlagsOut: nil
+                session, imageBuffer: pixelBuffer, presentationTimeStamp: pts,
+                duration: .invalid, frameProperties: props, sourceFrameRefcon: nil, infoFlagsOut: nil
             )
         }
     }
@@ -109,15 +99,12 @@ final class H264Encoder {
         var isKeyframe = false
         if let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[CFString: Any]],
            let first = attachments.first {
-            let notSync = (first[kCMSampleAttachmentKey_NotSync] as? Bool) ?? false
-            isKeyframe = !notSync
+            isKeyframe = !((first[kCMSampleAttachmentKey_NotSync] as? Bool) ?? false)
         }
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-        let us = UInt64(max(0, pts.seconds * 1_000_000))
-        onFrame?(data, isKeyframe, us)
+        onFrame?(data, isKeyframe, UInt64(max(0, pts.seconds * 1_000_000)))
     }
 
-    /// AVCC → list of NAL units (no start code).
     static func nalUnits(fromAVCC data: Data) -> [Data] {
         var out: [Data] = []
         var i = 0

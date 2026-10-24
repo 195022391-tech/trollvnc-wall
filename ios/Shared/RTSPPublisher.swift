@@ -31,6 +31,7 @@ final class RTSPPublisher {
         output.open()
 
         let base = "rtsp://\(host):\(port)/\(path)?token=\(token)"
+        lastBase = base
         _ = try request("OPTIONS", url: base, headers: [:])
         let sdp = """
         v=0

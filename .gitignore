@@ -1,10 +1,12 @@
 backend/trollvnc-wall.exe
-backend/*.log
-**/node_modules/
+backend/scripts/node_modules/
 scripts/node_modules/
 test-artifacts/
 dist/
+*.log
 ios/build/
 ios/*.xcodeproj/
-*.tipa
+ios/*.xcworkspace/
 .DS_Store
+tools/mediamtx/*.zip
+tools/mediamtx/mediamtx.exe

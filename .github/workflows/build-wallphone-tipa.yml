@@ -38,7 +38,7 @@ jobs:
             V="0.1.0"
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
-          echo "Building WallPhone tipa version $V"
+          echo "Building WallPhone tipa $V"
 
       - name: Install tools
         run: |
@@ -67,6 +67,7 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="" \
             ONLY_ACTIVE_ARCH=NO \
+            MARKETING_VERSION="${{ steps.ver.outputs.version }}" \
             build
 
       - name: Pack tipa
@@ -93,14 +94,13 @@ jobs:
           set -euo pipefail
           TAG="wallphone-v${VERSION}"
           TIPA="dist/WallPhone-${VERSION}.tipa"
-          NOTES="TrollVNC 屏幕墙 — WallPhone tipa（TrollStore）
+          NOTES="屏幕墙推流客户端 tipa（TrollStore）
 
-          - 彩条测试流 H.264 → RTSP :8554/{deviceId}?token=
+          - 彩条测试流 → MediaMTX RTSP :8554/{deviceId}?token=
           - 控制 TCP :19000（hello / heartbeat / set_quality）
-          - 墙页须先登记相同 deviceId+token
-          - 安装：TrollStore 打开本 tipa
+          - 电脑端先登记相同 deviceId+token，再开墙页
 
-          Artifact from run ${{ github.run_id }}."
+          Artifact run ${{ github.run_id }}."
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$TIPA" --clobber
           else
