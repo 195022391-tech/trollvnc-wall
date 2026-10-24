@@ -34,6 +34,8 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>用于向屏幕墙推送相机画面</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>可选，用于推流时带上声音</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>用于向电脑屏幕墙推送 RTSP 画面</string>
 	<key>NSBonjourServices</key>
