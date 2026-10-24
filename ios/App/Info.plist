@@ -37,6 +37,7 @@
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_rtsp._tcp</string>
+		<string>_trollvnc-wall._tcp</string>
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>

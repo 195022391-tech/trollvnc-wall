@@ -1,122 +1,108 @@
 import Foundation
-import Network
 
-/// 墙控制通道：[u32 BE len][json]
+/// 墙控制通道：[u32 BE len][json] — CFStream + 专用队列 RunLoop（与 RTSP 同 TCP 路径）
 final class CtrlClient {
-    private var conn: NWConnection?
+    private var input: InputStream?
+    private var output: OutputStream?
     private let queue = DispatchQueue(label: "cn.local.wallphone.ctrl")
     private var running = false
-    private var hbTimer: DispatchSourceTimer?
-    private var recvBuf = Data()
+    private var hbTimer: Timer?
     var onLog: ((String) -> Void)?
     var onSetQuality: ((_ mode: String, _ seq: UInt64, _ forceIdr: Bool, _ w: Int, _ h: Int, _ br: Int, _ fps: Int) -> Void)?
 
     func connect(host: String, port: Int, deviceId: String, token: String, name: String) {
         disconnect()
-        guard let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
-            onLog?("ctrl: bad port")
+        var readStream: Unmanaged<CFReadStream>?
+        var writeStream: Unmanaged<CFWriteStream>?
+        CFStreamCreatePairWithSocketToHost(nil, host as CFString, UInt32(port), &readStream, &writeStream)
+        guard let rs = readStream?.takeRetainedValue(), let ws = writeStream?.takeRetainedValue() else {
+            onLog?("ctrl: create stream failed")
             return
         }
-        let c = NWConnection(host: NWEndpoint.Host(host), port: nwPort, using: .tcp)
-        conn = c
-        running = true
-        let ready = DispatchSemaphore(value: 0)
-        var readyOK = false
-        c.stateUpdateHandler = { [weak self] state in
-            switch state {
-            case .ready:
-                readyOK = true
-                ready.signal()
-            case .failed(let err):
-                self?.onLog?("ctrl: failed \(err)")
-                ready.signal()
-                self?.disconnect()
-            case .cancelled:
-                ready.signal()
-            default:
-                break
+        let input = rs as InputStream
+        let output = ws as OutputStream
+        self.input = input
+        self.output = output
+
+        let boot = DispatchSemaphore(value: 0)
+        var bootErr: String?
+        queue.async { [weak self] in
+            guard let self else { boot.signal(); return }
+            input.schedule(in: .current, forMode: .common)
+            output.schedule(in: .current, forMode: .common)
+            input.open()
+            output.open()
+            do {
+                try Self.waitOpen(input, output, timeoutMs: 8000)
+            } catch {
+                bootErr = error.localizedDescription
+                boot.signal()
+                return
             }
+            self.running = true
+            boot.signal()
+            self.onLog?("ctrl: tcp ready")
+
+            let hello: [String: Any] = [
+                "type": "hello",
+                "body": ["deviceId": deviceId, "token": token, "name": name],
+            ]
+            do {
+                try self.writeJSON(hello)
+                self.onLog?("ctrl: hello sent")
+            } catch {
+                self.onLog?("ctrl: hello failed \(error.localizedDescription)")
+                self.teardownStreams()
+                return
+            }
+
+            // RunLoop Timer（同队列），避免 GCD timer 被 readLoop 饿死
+            let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+                guard let self, self.running else { return }
+                try? self.writeJSON(["type": "heartbeat"])
+            }
+            RunLoop.current.add(timer, forMode: .common)
+            self.hbTimer = timer
+            self.readLoop()
         }
-        c.start(queue: queue)
-        _ = ready.wait(timeout: .now() + 5)
-        guard running, readyOK else {
+        _ = boot.wait(timeout: .now() + 10)
+        if let bootErr {
+            onLog?("ctrl: tcp \(bootErr)")
+            disconnect()
+        } else if !running {
             onLog?("ctrl: tcp connect timeout/fail")
             disconnect()
-            return
         }
-        onLog?("ctrl: tcp ready")
-
-        let hello: [String: Any] = [
-            "type": "hello",
-            "body": ["deviceId": deviceId, "token": token, "name": name],
-        ]
-        do {
-            try writeJSON(hello)
-            onLog?("ctrl: hello sent")
-        } catch {
-            onLog?("ctrl: hello failed \(error.localizedDescription)")
-            disconnect()
-            return
-        }
-        startReceive()
-        startHeartbeat()
     }
 
     func disconnect() {
         running = false
-        hbTimer?.cancel()
-        hbTimer = nil
-        conn?.cancel()
-        conn = nil
-        recvBuf.removeAll()
-    }
-
-    private func startHeartbeat() {
-        hbTimer?.cancel()
-        let t = DispatchSource.makeTimerSource(queue: queue)
-        t.schedule(deadline: .now() + 0.5, repeating: 0.5)
-        t.setEventHandler { [weak self] in
-            guard let self, self.running else { return }
-            try? self.writeJSON(["type": "heartbeat"])
-        }
-        t.resume()
-        hbTimer = t
-    }
-
-    private func startReceive() {
-        guard let conn, running else { return }
-        conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
-            guard let self, self.running else { return }
-            if let error {
-                self.onLog?("ctrl: recv \(error)")
-                self.disconnect()
-                return
-            }
-            if let data, !data.isEmpty {
-                self.recvBuf.append(data)
-                self.drainFrames()
-            }
-            if isComplete {
-                self.onLog?("ctrl: closed")
-                self.disconnect()
-                return
-            }
-            self.startReceive()
+        queue.async { [weak self] in
+            self?.hbTimer?.invalidate()
+            self?.hbTimer = nil
+            self?.teardownStreams()
         }
     }
 
-    private func drainFrames() {
-        while recvBuf.count >= 4 {
-            let n = Int(recvBuf[0]) << 24 | Int(recvBuf[1]) << 16 | Int(recvBuf[2]) << 8 | Int(recvBuf[3])
-            guard n > 0, n <= 65536 else {
-                onLog?("ctrl: bad frame len \(n)")
-                disconnect()
+    private func teardownStreams() {
+        running = false
+        input?.close()
+        output?.close()
+        input = nil
+        output = nil
+    }
+
+    private func readLoop() {
+        guard let input else { return }
+        while running {
+            do {
+                let frame = try readFrame(input)
+                handle(frame)
+            } catch {
+                if running { onLog?("ctrl: read end \(error.localizedDescription)") }
+                teardownStreams()
                 return
             }
-            guard recvBuf.count >= 4 + n else { return }
-            let payload = recvBuf.subdata(in: 4 ..< (4 + n))
-            recvBuf.removeSubrange(0 ..< (4 + n))
-            handle(payload)
         }
     }
 
@@ -131,10 +117,10 @@ final class CtrlClient {
             let body = obj["body"] as? [String: Any] ?? [:]
             let mode = body["mode"] as? String ?? "preview"
             let force = body["forceIdr"] as? Bool ?? true
-            let w = body["width"] as? Int ?? 1280
-            let h = body["height"] as? Int ?? 720
-            let br = body["bitrateKbps"] as? Int ?? 600
-            let fps = body["fps"] as? Int ?? 15
+            let w = (body["width"] as? NSNumber)?.intValue ?? 1280
+            let h = (body["height"] as? NSNumber)?.intValue ?? 720
+            let br = (body["bitrateKbps"] as? NSNumber)?.intValue ?? 600
+            let fps = (body["fps"] as? NSNumber)?.intValue ?? 15
             onSetQuality?(mode, seq, force, w, h, br, fps)
             let ack: [String: Any] = [
                 "type": "switch_ack",
@@ -151,18 +137,74 @@ final class CtrlClient {
     }
 
     private func writeJSON(_ obj: [String: Any]) throws {
-        guard let conn, running else { throw NSError(domain: "ctrl", code: 1) }
+        guard let output, running else { throw NSError(domain: "ctrl", code: 1) }
         let payload = try JSONSerialization.data(withJSONObject: obj)
         var len = UInt32(payload.count).bigEndian
-        var frame = Data(bytes: &len, count: 4)
-        frame.append(payload)
-        let sem = DispatchSemaphore(value: 0)
-        var sendErr: Error?
-        conn.send(content: frame, completion: .contentProcessed { err in
-            sendErr = err
-            sem.signal()
-        })
-        _ = sem.wait(timeout: .now() + 3)
-        if let sendErr { throw sendErr }
+        var hdr = Data(bytes: &len, count: 4)
+        hdr.append(payload)
+        try writeAll(output, hdr)
+    }
+
+    private func readFrame(_ input: InputStream) throws -> Data {
+        var hdr = [UInt8](repeating: 0, count: 4)
+        try readExact(input, &hdr, 4)
+        let n = Int(hdr[0]) << 24 | Int(hdr[1]) << 16 | Int(hdr[2]) << 8 | Int(hdr[3])
+        if n <= 0 || n > 65536 { throw NSError(domain: "ctrl", code: 2) }
+        var buf = [UInt8](repeating: 0, count: n)
+        try readExact(input, &buf, n)
+        return Data(buf)
+    }
+
+    private func readExact(_ input: InputStream, _ buf: inout [UInt8], _ count: Int) throws {
+        var off = 0
+        let deadline = Date().addingTimeInterval(8)
+        while off < count {
+            if !running { throw NSError(domain: "ctrl", code: 6) }
+            if Date() > deadline {
+                throw NSError(domain: "ctrl", code: 5, userInfo: [NSLocalizedDescriptionKey: "read timeout"])
+            }
+            // 泵 RunLoop：心跳 Timer + CFStream 回调
+            RunLoop.current.run(mode: .common, before: Date().addingTimeInterval(0.05))
+            guard input.hasBytesAvailable || input.streamStatus == .atEnd || input.streamStatus == .error else {
+                continue
+            }
+            if input.streamStatus == .error || input.streamStatus == .atEnd {
+                throw NSError(domain: "ctrl", code: 3)
+            }
+            let n = buf.withUnsafeMutableBytes { raw in
+                input.read(raw.bindMemory(to: UInt8.self).baseAddress!.advanced(by: off), maxLength: count - off)
+            }
+            if n < 0 { throw NSError(domain: "ctrl", code: 3) }
+            if n == 0 { continue }
+            off += n
+        }
+    }
+
+    private func writeAll(_ stream: OutputStream, _ data: Data) throws {
+        var offset = 0
+        while offset < data.count {
+            if !stream.hasSpaceAvailable {
+                RunLoop.current.run(mode: .common, before: Date().addingTimeInterval(0.02))
+            }
+            let wrote = data.withUnsafeBytes { raw -> Int in
+                stream.write(raw.bindMemory(to: UInt8.self).baseAddress!.advanced(by: offset), maxLength: data.count - offset)
+            }
+            if wrote <= 0 { throw NSError(domain: "ctrl", code: 4) }
+            offset += wrote
+        }
+    }
+
+    private static func waitOpen(_ input: InputStream, _ output: OutputStream, timeoutMs: Int) throws {
+        let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000)
+        while Date() < deadline {
+            let inSt = input.streamStatus
+            let outSt = output.streamStatus
+            if inSt == .error || outSt == .error {
+                throw NSError(domain: "ctrl", code: 7, userInfo: [NSLocalizedDescriptionKey: "connect failed"])
+            }
+            if (inSt == .open || inSt == .reading) && (outSt == .open || outSt == .writing) { return }
+            RunLoop.current.run(mode: .common, before: Date().addingTimeInterval(0.05))
+        }
+        throw NSError(domain: "ctrl", code: 8, userInfo: [NSLocalizedDescriptionKey: "connect timeout"])
     }
 }

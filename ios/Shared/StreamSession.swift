@@ -29,7 +29,6 @@ final class StreamSession {
             self?.applyQuality(mode: mode, forceIdr: forceIdr, w: w, h: h, br: br, fps: fps)
             self?.onLog?("set_quality mode=\(mode) seq=\(seq) \(w)x\(h) @\(br)kbps/\(fps)fps")
         }
-        ctrl.connect(host: host, port: 19000, deviceId: deviceId, token: token, name: name)
 
         do {
             try encoder.start(
@@ -43,12 +42,14 @@ final class StreamSession {
                     sps: self.encoder.sps, pps: self.encoder.pps
                 )
             }
+            // 先 RTSP（已验证通），再 ctrl，避免 ctrl 阻塞/失败拖垮推流
             try rtsp.connect(
                 host: host, port: 8554, path: deviceId, token: token,
                 width: width, height: height, fps: fps
             )
             startTimer()
             onLog?("streaming \(width)x\(height) @\(fps)fps \(bitrateKbps)kbps")
+            ctrl.connect(host: host, port: 19000, deviceId: deviceId, token: token, name: name)
         } catch {
             onLog?("start failed: \(error.localizedDescription)")
             stop()

@@ -84,25 +84,31 @@ func (s *Server) acceptLoop(ctx context.Context) {
 
 func (s *Server) handleConn(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
+	remote := conn.RemoteAddr().String()
+	log.Printf("ctrl accept from %s", remote)
 	_ = conn.SetDeadline(time.Now().Add(time.Duration(s.cfg.Ctrl.ReadTimeoutMs) * time.Millisecond * 3))
 
 	raw, err := ReadFrame(conn, s.cfg.Ctrl.MaxFrameSize)
 	if err != nil {
+		log.Printf("ctrl hello read fail from %s: %v", remote, err)
 		return
 	}
 	env, err := Decode(raw)
 	if err != nil || env.Type != "hello" {
+		log.Printf("ctrl bad hello from %s type=%q err=%v", remote, env.Type, err)
 		return
 	}
 	var hello HelloBody
 	if err := json.Unmarshal(env.Body, &hello); err != nil {
+		log.Printf("ctrl hello body from %s: %v raw=%s", remote, err, string(raw))
 		return
 	}
 	// 必须先经 API 登记 token，禁止 hello 自注册
 	if !s.dm.ValidateToken(hello.DeviceID, hello.Token) {
-		log.Printf("ctrl reject unknown device/token id=%s", hello.DeviceID)
+		log.Printf("ctrl reject unknown device/token id=%s from %s", hello.DeviceID, remote)
 		return
 	}
+	log.Printf("ctrl hello ok id=%s from %s", hello.DeviceID, remote)
 
 	// 先 dead 旧 session，再绑新（早于后续消息）
 	s.killSession(hello.DeviceID)
