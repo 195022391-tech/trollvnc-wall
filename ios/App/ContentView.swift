@@ -22,7 +22,7 @@ struct ContentView: View {
                     TextField("显示名", text: $name)
                 }
                 Section {
-                    Button(streaming ? "停止推流" : "开始推流（相机 H.265）") {
+                    Button(streaming ? "停止推流" : "开始推流（屏幕 H.265）") {
                         toggle()
                     }
                     .foregroundColor(streaming ? .red : .accentColor)
@@ -34,7 +34,7 @@ struct ContentView: View {
                         .textSelection(.enabled)
                 }
                 Section("说明") {
-                    Text("登记相同 deviceId+token → 填电脑 IP → 允许相机 → 开始")
+                    Text("登记相同 deviceId+token → 填电脑 IP → 开始 → 允许录屏（无需相机）")
                         .font(.footnote)
                         .foregroundColor(.secondary)
                 }

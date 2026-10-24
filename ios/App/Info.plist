@@ -32,8 +32,6 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>NSCameraUsageDescription</key>
-	<string>用于向屏幕墙推送相机画面</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>可选，用于推流时带上声音</string>
 	<key>NSLocalNetworkUsageDescription</key>
