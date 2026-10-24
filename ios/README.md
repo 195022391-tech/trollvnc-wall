@@ -8,4 +8,4 @@
 
 ## 构建 tipa
 
-GitHub Actions → **Build WallPhone tipa** → version `0.2.0`
+GitHub Actions → **Build WallPhone tipa** → version `0.2.3`

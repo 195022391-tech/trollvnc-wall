@@ -20,8 +20,17 @@ final class RootStreamSession: NSObject, ConnectChecker {
         _ = name
         requestAV { [weak self] cam, mic in
             guard let self else { return }
+            let st = AVCaptureDevice.authorizationStatus(for: .video)
+            self.onLog?("相机权限 status=\(Self.authName(st)) granted=\(cam)")
             guard cam else {
                 self.onLog?("无相机权限：设置 → 屏幕墙推流 → 相机")
+                return
+            }
+            let back = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+            let front = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
+            self.onLog?("相机设备 back=\(back != nil) front=\(front != nil)")
+            if back == nil && front == nil {
+                self.onLog?("系统找不到相机硬件，重装 tipa 或重启手机后再试")
                 return
             }
             if !mic { self.onLog?("无麦克风：将尝试纯视频") }
@@ -32,26 +41,30 @@ final class RootStreamSession: NSObject, ConnectChecker {
     }
 
     private func begin(host: String, deviceId: String, token: String, wantAudio: Bool) {
-        // 官方示例常用 640x480；SE2 上 1280x720 可能过 prepare 检查失败
+        // WallCameraSource 避开 RootEncoder CameraManager 按 height 排序后误比 width 的检查
         let trials: [(Int, Int, Int)] = [
             (640, 480, 800_000),
             (1280, 720, 1_200_000),
-            (960, 540, 900_000),
+            (352, 288, 400_000),
         ]
         let codecs: [VideoCodec] = [.H265, .H264]
+        let rotation = CameraHelper.getCameraOrientation()
+        onLog?("rotation=\(rotation)")
 
         for codec in codecs {
             let s = RtspStream(connectChecker: self)
+            s.changeVideoSource(source: WallCameraSource())
             s.setVideoCodec(codec: codec)
             var vOK = false
             var used = (0, 0, 0)
             for t in trials {
-                if s.prepareVideo(width: t.0, height: t.1, bitrate: t.2, fps: 30, iFrameInterval: 2, rotation: 0) {
+                if s.prepareVideo(width: t.0, height: t.1, bitrate: t.2, fps: 30, iFrameInterval: 2, rotation: rotation) {
                     vOK = true
                     used = t
                     break
                 }
-                onLog?("prepareVideo fail \(t.0)x\(t.1) \(codec)")
+                let stage = s.videoSource.created() ? "编码器" : "相机"
+                onLog?("prepareVideo fail \(t.0)x\(t.1) \(codec) @\(stage)")
             }
             guard vOK else {
                 s.release()
@@ -78,7 +91,7 @@ final class RootStreamSession: NSObject, ConnectChecker {
             running = true
             return
         }
-        onLog?("prepareVideo failed：相机分辨率/编码器都不行，看系统相机权限")
+        onLog?("prepareVideo failed：相机或编码器都起不来")
     }
 
     func stop() {
@@ -99,5 +112,15 @@ final class RootStreamSession: NSObject, ConnectChecker {
         group.enter()
         AVCaptureDevice.requestAccess(for: .audio) { ok in mic = ok; group.leave() }
         group.notify(queue: .main) { done(cam, mic) }
+    }
+
+    private static func authName(_ s: AVAuthorizationStatus) -> String {
+        switch s {
+        case .authorized: return "authorized"
+        case .denied: return "denied"
+        case .restricted: return "restricted"
+        case .notDetermined: return "notDetermined"
+        @unknown default: return "unknown"
+        }
     }
 }
