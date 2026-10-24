@@ -5,7 +5,7 @@ struct ContentView: View {
     @AppStorage("wall.deviceId") private var deviceId = "iphone-1"
     @AppStorage("wall.token") private var token = "changeme"
     @AppStorage("wall.name") private var name = "WallPhone"
-    @State private var logText = ""
+    @State private var logText = "（点开始后这里会出日志）"
     @State private var streaming = false
     private let session = RootStreamSession()
 
@@ -16,7 +16,7 @@ struct ContentView: View {
                     TextField("主机 IP", text: $host)
                         .textInputAutocapitalization(.never)
                         .keyboardType(.asciiCapable)
-                    TextField("deviceId（path）", text: $deviceId)
+                    TextField("deviceId", text: $deviceId)
                         .textInputAutocapitalization(.never)
                     SecureField("token", text: $token)
                     TextField("显示名", text: $name)
@@ -27,21 +27,16 @@ struct ContentView: View {
                     }
                     .foregroundColor(streaming ? .red : .accentColor)
                 }
+                Section("运行日志") {
+                    Text(logText)
+                        .font(.system(.footnote, design: .monospaced))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
                 Section("说明") {
-                    Text("1. 墙页先登记相同 deviceId + token")
-                    Text("2. RootEncoder → RTSP :8554/{deviceId}?token=")
-                    Text("3. 编码 H.265，仅视频（相机）")
-                    Text("v0.2 用 RootEncoder，非自研 RTSP")
+                    Text("登记相同 deviceId+token → 填电脑 IP → 允许相机 → 开始")
                         .font(.footnote)
                         .foregroundColor(.secondary)
-                }
-                Section("日志") {
-                    ScrollView {
-                        Text(logText)
-                            .font(.system(.footnote, design: .monospaced))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(minHeight: 180)
                 }
             }
             .navigationTitle("屏幕墙推流")
@@ -50,8 +45,11 @@ struct ContentView: View {
         .onAppear {
             session.onLog = { line in
                 DispatchQueue.main.async {
-                    let next = logText + "\n" + line
-                    logText = next.count > 4000 ? String(next.suffix(4000)) : next
+                    if logText.hasPrefix("（点开始") { logText = line }
+                    else {
+                        let next = logText + "\n" + line
+                        logText = next.count > 4000 ? String(next.suffix(4000)) : next
+                    }
                 }
             }
         }
@@ -63,7 +61,7 @@ struct ContentView: View {
             streaming = false
             append("stopped")
         } else {
-            logText = ""
+            logText = "starting…"
             session.start(
                 host: host.trimmingCharacters(in: .whitespaces),
                 deviceId: deviceId.trimmingCharacters(in: .whitespaces),
