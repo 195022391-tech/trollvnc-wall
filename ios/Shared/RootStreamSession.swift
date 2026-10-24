@@ -24,14 +24,38 @@ final class RootStreamSession: NSObject, ConnectChecker {
             onLog?("ReplayKit 不可用，无法采屏")
             return
         }
-        onLog?("采屏模式（无相机） ReplayKit available")
-        DispatchQueue.main.async {
+        onLog?("采屏模式（无相机）先要录屏权限")
+        preflightScreen { [weak self] ok in
+            guard let self else { return }
+            guard ok else {
+                self.onLog?("录屏未授权：控制中心/弹窗里允许「屏幕录制」")
+                return
+            }
+            self.onLog?("录屏已就绪，开始推 RTSP")
             self.begin(host: host, deviceId: deviceId, token: token)
         }
     }
 
+    /// 先起再停一次，把系统录屏授权拿下来，避免连上 MTX 后 5s 内无帧被踢。
+    private func preflightScreen(_ done: @escaping (Bool) -> Void) {
+        let rec = RPScreenRecorder.shared()
+        rec.isMicrophoneEnabled = false
+        rec.startCapture(handler: { _, _, _ in }, completionHandler: { [weak self] err in
+            if let err {
+                self?.onLog?("录屏启动失败：\(err.localizedDescription)")
+                DispatchQueue.main.async { done(false) }
+                return
+            }
+            rec.stopCapture { stopErr in
+                if let stopErr {
+                    self?.onLog?("录屏预检 stop：\(stopErr.localizedDescription)")
+                }
+                DispatchQueue.main.async { done(true) }
+            }
+        })
+    }
+
     private func begin(host: String, deviceId: String, token: String) {
-        // 竖屏尺寸；编码器失败再降
         let trials: [(Int, Int, Int)] = [
             (720, 1280, 1_200_000),
             (540, 960, 800_000),
@@ -45,7 +69,6 @@ final class RootStreamSession: NSObject, ConnectChecker {
             var vOK = false
             var used = (0, 0, 0)
             for t in trials {
-                // DisplayBase: prepareVideo(width:height:fps:bitrate:iFrameInterval:rotation:)
                 if s.prepareVideo(width: t.0, height: t.1, fps: 30, bitrate: t.2, iFrameInterval: 2, rotation: 0) {
                     vOK = true
                     used = t
@@ -65,7 +88,6 @@ final class RootStreamSession: NSObject, ConnectChecker {
             s.startStream(endpoint: url)
             stream = s
             running = true
-            onLog?("若弹出录屏权限请点允许")
             return
         }
         onLog?("prepareVideo failed：编码器起不来")

@@ -6,8 +6,9 @@
 logLevel: info
 logDestinations: [stdout]
 
-readTimeout: 5s
-writeTimeout: 5s
+# 录屏授权/首帧可能慢于 5s；过短会把刚连上的 publisher 掐掉
+readTimeout: 30s
+writeTimeout: 30s
 
 api: yes
 apiAddress: :9997
