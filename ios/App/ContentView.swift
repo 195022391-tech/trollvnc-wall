@@ -15,7 +15,7 @@ struct ContentView: View {
                 Section("电脑屏幕墙") {
                     TextField("主机 IP", text: $host)
                         .textInputAutocapitalization(.never)
-                        .keyboardType(.ASCIICapable)
+                        .keyboardType(.asciiCapable)
                     TextField("deviceId（path）", text: $deviceId)
                         .textInputAutocapitalization(.never)
                     SecureField("token", text: $token)
