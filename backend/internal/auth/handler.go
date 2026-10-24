@@ -109,7 +109,11 @@ func (h *Handler) handleMTXAuth(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case "read":
-		if req.User != h.cfg.MediaMTX.InternalUser || req.Password != h.cfg.MediaMTX.InternalPass {
+		// ffmpeg 常不把 userinfo 传给 MTX HTTP auth；本机 remux 放行。
+		// 非本机必须 wall_internal。
+		local := req.IP == "127.0.0.1" || req.IP == "::1" || ip == "127.0.0.1" || ip == "::1"
+		credOK := req.User == h.cfg.MediaMTX.InternalUser && req.Password == h.cfg.MediaMTX.InternalPass
+		if !local && !credOK {
 			h.hitFail(ip)
 			if h.limitedFail(ip) {
 				http.Error(w, errcode.AuthRateLimited, 429)

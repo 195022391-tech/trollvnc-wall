@@ -129,6 +129,7 @@ func (g *Gateway) serve(w http.ResponseWriter, r *http.Request) {
 	defer cmdCancel()
 
 	// ffmpeg 零转码 remux；Go 管独占/取消/健康打标
+	// 凭据在 URL；MTX HTTP auth 常收不到 userinfo → auth 侧对本机 read 放行
 	args := []string{
 		"-nostdin", "-loglevel", "error",
 		"-rtsp_transport", "tcp",
