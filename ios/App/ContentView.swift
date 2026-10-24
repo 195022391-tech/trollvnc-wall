@@ -1,13 +1,13 @@
 import SwiftUI
 
 struct ContentView: View {
-    @AppStorage("wall.host.v2") private var host = "192.168.9.103"
+    @AppStorage("wall.host.v3") private var host = "192.168.9.103"
     @AppStorage("wall.deviceId") private var deviceId = "iphone-1"
     @AppStorage("wall.token") private var token = "changeme"
     @AppStorage("wall.name") private var name = "WallPhone"
     @State private var logText = ""
     @State private var streaming = false
-    private let session = StreamSession()
+    private let session = RootStreamSession()
 
     var body: some View {
         NavigationView {
@@ -22,16 +22,16 @@ struct ContentView: View {
                     TextField("显示名", text: $name)
                 }
                 Section {
-                    Button(streaming ? "停止推流" : "开始彩条推流") {
+                    Button(streaming ? "停止推流" : "开始推流（相机 H.265）") {
                         toggle()
                     }
                     .foregroundColor(streaming ? .red : .accentColor)
                 }
                 Section("说明") {
                     Text("1. 墙页先登记相同 deviceId + token")
-                    Text("2. RTSP → :8554/{deviceId}?token=…")
-                    Text("3. 控制 → :19000 hello/heartbeat")
-                    Text("v0.1 仅彩条测试流（非系统录屏）")
+                    Text("2. RootEncoder → RTSP :8554/{deviceId}?token=")
+                    Text("3. 编码 H.265，仅视频（相机）")
+                    Text("v0.2 用 RootEncoder，非自研 RTSP")
                         .font(.footnote)
                         .foregroundColor(.secondary)
                 }
@@ -64,10 +64,12 @@ struct ContentView: View {
             append("stopped")
         } else {
             logText = ""
-            session.start(host: host.trimmingCharacters(in: .whitespaces),
-                          deviceId: deviceId.trimmingCharacters(in: .whitespaces),
-                          token: token,
-                          name: name)
+            session.start(
+                host: host.trimmingCharacters(in: .whitespaces),
+                deviceId: deviceId.trimmingCharacters(in: .whitespaces),
+                token: token,
+                name: name
+            )
             streaming = true
         }
     }

@@ -32,8 +32,10 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>用于向屏幕墙推送相机画面</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>用于向电脑屏幕墙推送 RTSP 画面与控制通道</string>
+	<string>用于向电脑屏幕墙推送 RTSP 画面</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_rtsp._tcp</string>

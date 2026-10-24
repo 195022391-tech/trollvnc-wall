@@ -1,25 +1,11 @@
-# WallPhone — 屏幕墙真机推流（tipa）
+# WallPhone v0.2 — RootEncoder → MediaMTX（H.265）
 
-对接 `trollvnc-wall`：**彩条 H.264 → RTSP TCP** + **控制 TCP**。
+## 用法
 
-## 使用
+1. 电脑墙登记相同 `deviceId` / `token`
+2. App 填电脑局域网 IP，允许相机，点「开始推流」
+3. 电脑可用：`ffplay -rtsp_transport tcp "rtsp://127.0.0.1:8554/<deviceId>"`（内部读）或墙页
 
-1. 电脑墙页登记相同 `deviceId` / `token`
-2. App 填电脑局域网 IP，点「开始彩条推流」
-3. 墙页应出现 preview 画面
+## 构建 tipa
 
-## GitHub 打 tipa
-
-Actions → **Build WallPhone tipa** → Run workflow
-
-或本目录本地（需 Mac）：
-
-```bash
-brew install xcodegen ldid
-cd ios && xcodegen generate
-xcodebuild -project WallPhone.xcodeproj -scheme WallPhone \
-  -configuration Release -sdk iphoneos -derivedDataPath build \
-  -destination 'generic/platform=iOS' \
-  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
-VERSION=0.1.0 DERIVED_DATA="$PWD/build" ./scripts/pack-tipa.sh ../dist
-```
+GitHub Actions → **Build WallPhone tipa** → version `0.2.0`

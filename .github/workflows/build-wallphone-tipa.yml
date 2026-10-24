@@ -6,7 +6,7 @@ on:
       version:
         description: "版本号（如 0.1.0）"
         required: false
-        default: "0.1.0"
+        default: "0.2.0"
       create_release:
         description: "上传到 GitHub Release"
         type: boolean
@@ -55,6 +55,7 @@ jobs:
         run: |
           set -euo pipefail
           xcodegen generate
+          xcodebuild -resolvePackageDependencies -project WallPhone.xcodeproj -scheme WallPhone
           xcodebuild \
             -project WallPhone.xcodeproj \
             -scheme WallPhone \
@@ -62,6 +63,7 @@ jobs:
             -sdk iphoneos \
             -derivedDataPath build \
             -destination 'generic/platform=iOS' \
+            -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
@@ -96,9 +98,9 @@ jobs:
           TIPA="dist/WallPhone-${VERSION}.tipa"
           NOTES="屏幕墙推流客户端 tipa（TrollStore）
 
-          - 彩条测试流 → MediaMTX RTSP :8554/{deviceId}?token=
-          - 控制 TCP :19000（hello / heartbeat / set_quality）
-          - 电脑端先登记相同 deviceId+token，再开墙页
+          - RootEncoder 相机 → MediaMTX RTSP :8554/{deviceId}?token=
+          - 编码 H.265（仅视频）
+          - 电脑端先登记相同 deviceId+token
 
           Artifact run ${{ github.run_id }}."
           if gh release view "$TAG" >/dev/null 2>&1; then
