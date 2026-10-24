@@ -68,7 +68,8 @@ func (d *Device) StreamOnline() bool {
 }
 
 func (d *Device) UIStateLocked() UIState {
-	if !d.CtrlOnline || !(d.MTXPublisherUp && d.TSPullHealthy) {
+	// 有推流即可上墙；ctrl 仅影响切 HD（无 ctrl 时保持 preview）
+	if !(d.MTXPublisherUp && d.TSPullHealthy) {
 		return Offline
 	}
 	if d.IsSwitching {
